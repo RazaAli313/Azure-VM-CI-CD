@@ -1,0 +1,24 @@
+name: CI Pipeline to staging/production environment
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Setup, test, and build project
+    env:
+      PORT: 8000
+    steps:  
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Run Docker Compose tests
+        run: |
+          docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from tests
