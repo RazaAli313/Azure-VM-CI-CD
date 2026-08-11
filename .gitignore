@@ -18,7 +18,6 @@ frontend/dist/
 backend/build/
 
 # Docker
-*.dockerfile
 docker-compose.override.yml
 
 # OS files

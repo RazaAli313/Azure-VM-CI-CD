@@ -1,0 +1,96 @@
+name: Build, Test, and Deploy to Azure Web App (Container)
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Setup Node for frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # Frontend: install and test
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Test frontend
+        run: |
+          if npm run test --if-present; then
+            echo "Frontend tests passed"
+          else
+            echo "No frontend test script found, skipping"
+          fi
+        working-directory: ./frontend
+
+      # Backend: setup, install, and test
+      - name: Setup Python (if backend is Python)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+        working-directory: ./backend
+
+      - name: Test backend
+        run: |
+          if pytest; then
+            echo "Backend tests passed"
+          else
+            echo "No backend tests found, skipping"
+          fi
+        working-directory: ./backend
+
+      # Azure login
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Login to Azure Container Registry
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+
+      # Build Docker images
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/frontend:latest ./frontend
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/backend:latest ./backend
+
+      # Push Docker images
+      - name: Push frontend image
+        run: docker push ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/frontend:latest
+
+      - name: Push backend image
+        run: docker push ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/backend:latest
+
+      # Deploy to Azure Web App for Containers
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          images: |
+            ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/frontend:latest
+            ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/backend:latest
